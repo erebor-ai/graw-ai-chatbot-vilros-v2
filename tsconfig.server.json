@@ -1,0 +1,15 @@
+{
+"extends": "./tsconfig.json",
+"compilerOptions": {
+    "outDir": "build/server",
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext",
+    "noEmit": false,
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "target": "ES2022"
+},
+"include": ["server.ts"],
+"exclude": ["node_modules"]
+}
+

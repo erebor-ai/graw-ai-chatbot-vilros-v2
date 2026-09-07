@@ -1,0 +1,458 @@
+{% comment %}
+  GRAW AI Chatbot - App Embed Block v2
+{% endcomment %}
+
+{% liquid
+  assign is_admin_preview = false
+  if request.design_mode
+    assign is_admin_preview = true
+  endif
+
+  assign default_brand_name_for_title = shop.name | split: ' ' | first
+  assign product_page_threshold_ms = block.settings.product_page_threshold_time | times: 1000
+  assign cart_page_threshold_ms = block.settings.cart_page_threshold_time | times: 1000
+
+  comment 
+    ============================================================================
+    GRAW AI - CLIENT CONFIGURATION
+    Set the proactive event sampling rate for this specific client here.
+    0.2 = 20% chance of firing, 1.0 = 100% chance of firing.
+    This value is updated by deploying the app extension (`shopify app deploy`).
+    ============================================================================
+  endcomment
+  assign enable_debug_logging = false
+  comment
+    ============================================================================
+    GRAW AI - DEVELOPER CONFIGURATION
+    Set to `true` to enable console logs, `false` to disable for production.
+    This is the master switch for the GrawLogger utility.
+    ============================================================================
+  endcomment
+  assign client_specific_sampling_rate = 0.01
+  assign event_sampling_rate_decimal = client_specific_sampling_rate
+
+  assign chat_base_color_setting = block.settings.chat_base_color | default: '' | downcase
+  assign use_custom_theme_palette = false
+  if chat_base_color_setting != '' and chat_base_color_setting != 'transparent' and chat_base_color_setting != '#00000000' and chat_base_color_setting != '#0000' and chat_base_color_setting != 'rgba(0,0,0,0)'
+    assign use_custom_theme_palette = true
+  endif
+
+  assign shop_identifier_for_vf_user = shop.permanent_domain | split: '.' | first | capitalize
+  assign chat_avatar_image_url = block.settings.chat_avatar_image | image_url: width: 100
+
+  assign launcher_icon_image_url = block.settings.launcher_icon_image | image_url: width: 64
+
+  assign graw_klaviyo_key_from_settings = block.settings.klaviyo_public_key | default: ""
+%}
+
+{% comment %} The logger is now defined inline to avoid parser-blocking scripts and ensure it's available immediately. {% endcomment %}
+
+<script>
+  // --- GRAW Logger Utility ---
+  (function(window) {
+    'use strict';
+    const GrawLogger = {
+      _isLoggingEnabled: function() {
+        // This check happens at call time, so GRAW_AI_SETTINGS will be defined.
+        return window.GRAW_AI_SETTINGS?.enableDebugLogging === true;
+      },
+      log: function(...args) {
+        if (this._isLoggingEnabled()) {
+          console.log("GRAW AI:", ...args);
+        }
+      },
+      warn: function(...args) {
+        if (this._isLoggingEnabled()) {
+          console.warn("GRAW AI:", ...args);
+        }
+      },
+      error: function(...args) {
+        // Errors are always logged regardless of the debug flag.
+        console.error("GRAW AI Error:", ...args);
+      },
+      info: function(...args) {
+        if (this._isLoggingEnabled()) {
+          console.info("GRAW AI:", ...args);
+        }
+      },
+    };
+    window.GrawLogger = GrawLogger;
+  })(window);
+  // --- End GRAW Logger ---
+
+  window.GRAW_AI_IS_ADMIN_PREVIEW = {{ is_admin_preview }};
+
+  // IMPORTANT: Define GRAW_AI_SETTINGS *after* the logger is created,
+  // but *before* the first call to GrawLogger.log that depends on it.
+  window.GRAW_AI_SETTINGS = {
+    // Settings from block.settings - these are always needed
+    title: {{ block.settings.chat_title | default: default_brand_name_for_title | json }},
+    description: {{ block.settings.chat_description | default: "How can I help you today?" | json }},
+    messagePlaceholder: {{ block.settings.chat_message_placeholder | default: "Type your message..." | json }},
+    launcherText: {{ block.settings.launcher_text | default: "Ask an Expert" | json }},
+    chatAvatarUrl: {{ chat_avatar_image_url | json }},
+    launcherIconUrl: {{ launcher_icon_image_url | json }},
+    chatBaseColor: {% if use_custom_theme_palette %}{{ block.settings.chat_base_color | json }}{% else %}null{% endif %},
+    voiceflowProjectID: {{ block.settings.voiceflow_project_id | json }},
+    klaviyoPublicKey: {{ graw_klaviyo_key_from_settings | json }}, // JS still gets it via block.settings
+    voiceflowSessionUserName: {{ shop_identifier_for_vf_user | default: "ShopUser" | prepend: "GRAW-" | json }},
+    freeShippingThreshold: {{ block.settings.free_shipping_threshold | default: 100 | json }},
+    inactiveCustomerMonths: {{ block.settings.inactive_customer_months | default: 6 | json }},
+    productPageThresholdTime: {{ product_page_threshold_ms | default: 15000 | json }},
+    cartPageThresholdTime: {{ cart_page_threshold_ms | default: 15000 | json }},
+    eventSamplingRate: {{ event_sampling_rate_decimal | default: 1.0 | json }},
+    enableDebugLogging: {{ enable_debug_logging | json }},
+
+    // Settings from global Liquid objects - generally safe in admin, JS should handle if null/empty
+    shopDomain: {{ shop.permanent_domain | json }},
+    shopCurrency: {{ cart.currency.iso_code | default: "USD" | json }}, // Provide default for admin
+    moneyFormat: {{ shop.money_format | json }},
+    currencySymbol: {{ cart.currency.symbol | json }}
+  };
+
+  // Now it's safe to log.
+  GrawLogger.log("Admin Preview Mode:", window.GRAW_AI_IS_ADMIN_PREVIEW);
+  GrawLogger.log("GRAW AI: Settings populated:", JSON.parse(JSON.stringify(window.GRAW_AI_SETTINGS)));
+
+  // Shopify context data - will be null/empty in admin for some, JS handlers need to be robust
+  // These are populated here, but the scripts that heavily rely on them won't be loaded/initialized in admin mode.
+  window.shopifyProduct = {% if product %}{{ product | json }}{% else %}null{% endif %};
+  window.shopifyProductMetafields = {% if product %}{% raw %}{% endraw %}{ reviews:{rating:{{product.metafields.reviews.rating.value | default:'null'}},rating_count:{{product.metafields.reviews.rating_count | default:'null'}}},loox:{avg_rating:{{product.metafields.loox.avg_rating | default:'null'}},num_reviews:{{product.metafields.loox.num_reviews | default:'null'}}},okendo:{summaryData:{reviewAverageValue:{{product.metafields.okendo.summaryData.reviewAverageValue | default:'null'}},reviewCount:{{product.metafields.okendo.summaryData.reviewCount | default:'null'}}}},ba_rev:{review_data:{stars:{{product.metafields.ba_rev.review_data.stars | default:'null'}},reviews_count:{{product.metafields.ba_rev.review_data.reviews_count | default:'null'}}}},air_reviews_product:{review_avg:{{product.metafields.air_reviews_product.review_avg | default:'null'}},review_count:{{product.metafields.air_reviews_product.review_count | default:'null'}}} }{% raw %}{% endraw %}{% else %}null{% endif %};
+  window.shopifyVariantData = {% if product %}{% raw %}{% endraw %}{ {% for variant in product.variants %}"{{ variant.id }}":{inventory_quantity:{{variant.inventory_quantity | default:0}},inventory_management:"{{variant.inventory_management}}",inventory_policy:"{{variant.inventory_policy}}"}{% unless forloop.last %},{% endunless %}{% endfor %} }{% raw %}{% endraw %}{% else %}null{% endif %};
+  window.customerData = {% if customer %}{ isReturningVisitor:true,totalSpent:{{customer.total_spent | json}},totalOrders:{{customer.orders_count | json}},customer:{email:{{customer.email | json}},name:{{customer.name | json}},id:{{customer.id | json}},firstName:{{customer.first_name | json}},lastName:{{customer.last_name | json}},acceptsMarketing:{{customer.accepts_marketing | json}},orders:[{% for order in customer.orders limit:5 %}{id:{{order.id | json}},created_at:{{order.created_at | date:'%Y-%m-%dT%H:%M:%S%z' | json}}}{% unless forloop.last %},{% endunless %}{% endfor %}]} }{% else %}{isReturningVisitor:false,totalSpent:0,totalOrders:0,customer:null}{% endif %};
+  window.Shopify = window.Shopify || {}; window.Shopify.customer = {% if customer %}{{customer | json}}{% else %}null{% endif %};
+  window.shopifyCart = {% if cart %}{{ cart | json }}{% else %}null{% endif %}; // cart object might be null in admin
+  window.shopifyCurrency = {symbol:{{cart.currency.symbol | json}},name:{{cart.currency.name | json}},code:{{cart.currency.iso_code | json}}};
+</script>
+
+{% comment %} Static CSS for GRAW extensions, fallbacks etc. Loaded before dynamic sheet. {% endcomment %}
+{{ 'widget.css' | asset_url | stylesheet_tag }}
+
+{% comment %} Load JS Assets - Order Matters for `defer` scripts {% endcomment %}
+<script src="{{ 'graw-ai-stylesheet-builder.js' | asset_url }}" defer></script>
+<script src="{{ 'theme-manager.js' | asset_url }}" defer></script>
+<script src="{{ 'user-identifier.js' | asset_url }}" defer></script>
+<script src="{{ 'voiceflow_extensions.js' | asset_url }}" defer></script>
+<script src="{{ 'confetti.js' | asset_url }}" defer></script>
+
+{% if graw_klaviyo_key_from_settings != blank and is_admin_preview == false %}
+  <script async>!function(){if(!window.klaviyo){/* Klaviyo init snippet (keep as is) */ try{window.klaviyo=new Proxy({},{get:function(n,i){return"push"===i?function(){var n;(n=window._klOnsite).push.apply(n,arguments)}:function(){for(var n=arguments.length,o=new Array(n),w=0;w<n;w++)o[w]=arguments[w];var t="function"==typeof o[o.length-1]?o.pop():void 0,e=new Promise((function(n){window._klOnsite.push([i].concat(o,[function(i){t&&t(i),n(i)}]))}));return e}}})}catch(n){window.klaviyo=window.klaviyo||[],window.klaviyo.push=function(){var n;(n=window._klOnsite).push.apply(n,arguments)}}}}();</script>
+  <script async type="text/javascript" src="//static.klaviyo.com/onsite/js/{{ graw_klaviyo_key_from_settings }}/klaviyo.js"></script>
+{% endif %}
+
+{% comment %} Load remaining GRAW AI handlers and managers (only if not in admin preview) {% endcomment %}
+{% if is_admin_preview == false %}
+  <script src="{{ 'conversation-state-manager.js' | asset_url }}" defer></script>
+  <script src="{{ 'product-variable-manager.js' | asset_url }}" defer></script>
+  <script src="{{ 'customer_identifier.js' | asset_url }}" defer></script>
+  <script src="{{ 'product-page-handler.js' | asset_url }}" defer></script>
+  <script src="{{ 'out-of-stock-handler.js' | asset_url }}" defer></script>
+  <script src="{{ 'email-capture-message-handler.js' | asset_url }}" defer></script>
+  <script src="{{ 'cart_monitor.js' | asset_url }}" defer></script>
+  <script src="{{ 'gift-card-handler.js' | asset_url }}" defer></script>
+  <script src="{{ 'checkout-tracking.js' | asset_url }}" defer></script>
+  <script src="{{ 'simple-attribution-tracker.js' | asset_url }}" defer></script>
+  <script src="{{ 'proactive-close-watcher.js' | asset_url }}" defer></script>
+{% endif %}
+
+<canvas id="confetti-canvas"></canvas>
+<div id="flat-chat"></div>
+<div id="voiceflow-chat-frame"></div>
+
+<script type="text/javascript">
+  function initializeGrawAISystems() {
+    GrawLogger.log("GRAW AI: Initializing systems. Admin Preview Mode:", window.GRAW_AI_IS_ADMIN_PREVIEW);
+    let dynamicStylesheetUri = undefined; // Default to undefined
+
+    // Generate stylesheet string only if a custom base color is set, or if launcher text/icon/avatar is set.
+    // The GrawAIStylesheetBuilder.buildCssString will return an empty string if no customizations are applicable.
+    if (window.GRAW_AI_SETTINGS.chatBaseColor || window.GRAW_AI_SETTINGS.launcherText || window.GRAW_AI_SETTINGS.launcherIconUrl || window.GRAW_AI_SETTINGS.chatAvatarUrl) {
+        if (typeof GrawAIStylesheetBuilder !== 'undefined' && GrawAIStylesheetBuilder.encodeStylesheetForVoiceflow) {
+            const tempUri = GrawAIStylesheetBuilder.encodeStylesheetForVoiceflow(window.GRAW_AI_SETTINGS);
+            if (tempUri && tempUri.startsWith('data:text/css;base64,')) {
+                dynamicStylesheetUri = tempUri;
+                GrawLogger.log("GRAW AI: Custom dynamic stylesheet generated for Voiceflow.");
+            } else if (tempUri === "") { // Builder returned empty string intentionally
+                 GrawLogger.log("GRAW AI: Stylesheet builder returned empty string (no specific overrides needed beyond defaults or GRAW base CSS). VF default theme will apply for palette if no base color.");
+                 dynamicStylesheetUri = undefined; // Ensure it's undefined for VF
+            } else {
+                GrawLogger.log("GRAW AI: Stylesheet builder ran but produced invalid URI. VF default theme will apply for palette.");
+                dynamicStylesheetUri = undefined; // Ensure it's undefined
+            }
+        } else {
+            GrawLogger.warn('GRAW AI: Stylesheet Builder not ready. VF default theme will apply for palette.');
+        }
+    } else {
+        GrawLogger.log("GRAW AI: No custom theme settings (base color, launcher text/icon, avatar) provided. Voiceflow will use its internal/dashboard theme.");
+        // Ensure GRAW_AI_GENERATED_PALETTE is null if no custom theme attempt was made based on baseColor
+        if (typeof GrawAIStylesheetBuilder !== 'undefined' && GrawAIStylesheetBuilder.generatePalette && !window.GRAW_AI_SETTINGS.chatBaseColor) {
+            GrawAIStylesheetBuilder.generatePalette(null); // This will set window.GRAW_AI_GENERATED_PALETTE to null
+        }
+    }
+    
+    var v = document.createElement('script'),
+      s = document.getElementsByTagName('script')[0];
+    v.onload = function () {
+      GrawLogger.log('GRAW AI: Voiceflow widget script (bundle.mjs) loaded.');
+      if (
+        typeof UserIdentifier === 'undefined' ||
+        !UserIdentifier.getUserId ||
+        typeof window.GRAW_AI_SETTINGS === 'undefined'
+      ) {
+        GrawLogger.error(
+          'GRAW AI: Critical dependencies (UserIdentifier or GRAW_AI_SETTINGS) not loaded prior to VF init.'
+        );
+        return;
+      }
+
+      if (typeof UserIdentifier !== 'undefined' && UserIdentifier.maybeRegenerateId) {
+        UserIdentifier.maybeRegenerateId();
+      }      
+
+      // UserID generation should happen regardless of admin preview for widget stability
+      const userId = UserIdentifier.getUserId();
+      const settings = window.GRAW_AI_SETTINGS;
+
+      GrawLogger.log('GRAW AI: Preparing Voiceflow config with settings:', settings);
+
+      const voiceflowConfig = {
+        verify: { projectID: settings.voiceflowProjectID },
+        url: 'https://general-runtime.voiceflow.com',
+        versionID: 'production', // Consider making this a setting
+        userID: userId,
+        user: { name: settings.voiceflowSessionUserName },
+        assistant: {
+          banner: {
+            title: settings.title,
+            description: settings.description,
+          },
+          inputPlaceholder: settings.messagePlaceholder,
+          persistence: 'sessionStorage',
+          stylesheet: dynamicStylesheetUri || undefined, // Pass undefined if empty string
+          extensions:
+            !window.GRAW_AI_IS_ADMIN_PREVIEW
+              ? [
+                  // Only load extensions if not in admin preview
+                  ConfettiExtension,
+                  FileUploadExtension,
+                  EmailVerificationExtension,
+                  ShopifyOrderListExtension,
+                  WaitingAnimationExtension,
+                  GiftCardDisplayExtension,
+                  DoneAnimationExtension,
+                  FeedbackExtension,
+                  OrderNumberExtension,
+                  ItemTrackingExtension,
+                  EmailInputExtension,
+                  CancelItemExtension,
+                  ReturnItemExtension,
+                  ProactiveMessagesExtension,
+                  CustomerDataExtension,
+                  KlaviyoDataExtension,
+                  AddToCartExtension,
+                  CheckoutExtension,
+                  PlaceholderExtension,
+                  AbandonedCartExtension,
+                  ClearProactiveExtension,
+                  GoCheckoutExtension,
+                  ContactFormExtension,
+              ]
+              : [], // Empty extensions array in admin
+        },
+        autostart: true,
+        allowDangerousHTML: true,
+      };
+      GrawLogger.log('GRAW AI: Voiceflow config prepared:', JSON.parse(JSON.stringify(voiceflowConfig)));
+      if (dynamicStylesheetUri)
+        GrawLogger.log(
+          'GRAW AI: Passing dynamic stylesheet to Voiceflow:',
+          dynamicStylesheetUri.substring(0, 100) + '...'
+        );
+
+      window.voiceflow.chat
+        .load(voiceflowConfig)
+        .then(() => {
+          GrawLogger.log('GRAW AI: Voiceflow chat.load().then() callback triggered.');
+          if (window.GRAW_AI_IS_ADMIN_PREVIEW) {
+            GrawLogger.log('GRAW AI: Admin preview mode - skipping GRAW AI handler initializations.');
+            return;
+          }
+          GrawLogger.log('GRAW AI: Initializing GRAW AI handlers...');
+          try {
+            if (typeof window.GrawThemeManager !== 'undefined' && window.GrawThemeManager.init) window.GrawThemeManager.init();
+            if (UserIdentifier.init) UserIdentifier.init();
+            if (typeof customerIdentifier !== 'undefined' && customerIdentifier.init) customerIdentifier.init();
+            if (typeof ProductVariableManager !== 'undefined' && ProductVariableManager.init) ProductVariableManager.init();
+            if (typeof ProductPageEventHandler !== 'undefined' && ProductPageEventHandler.init) ProductPageEventHandler.init();
+            if (typeof OutOfStockHandler !== 'undefined' && OutOfStockHandler.init) OutOfStockHandler.init();
+            if (typeof EmailCaptureEventHandler !== 'undefined' && EmailCaptureEventHandler.init) EmailCaptureEventHandler.init();
+            if (typeof CartPageEventHandler !== 'undefined' && CartPageEventHandler.init) CartPageEventHandler.init();
+            if (typeof ProactiveCloseWatcher !== 'undefined' && ProactiveCloseWatcher.init) ProactiveCloseWatcher.init();
+            if (typeof GiftCardAllocator !== 'undefined' && GiftCardAllocator.init) GiftCardAllocator.init();
+            
+            if (typeof window.GrawCheckoutTracker !== 'undefined' && window.GrawCheckoutTracker.init) {
+              window.GrawCheckoutTracker.init();
+            }
+
+            // Initialize attribution tracking scripts
+            if (typeof window.GrawCheckoutTracker !== 'undefined' && window.GrawCheckoutTracker.init) {
+              GrawLogger.log('GRAW AI: Initializing checkout tracker...');
+              window.GrawCheckoutTracker.init();
+            }
+            if (typeof window.SimpleAttributionTracker !== 'undefined' && window.SimpleAttributionTracker.init) {
+              GrawLogger.log('GRAW AI: Initializing simple attribution tracker...');
+              window.SimpleAttributionTracker.init();
+            }
+
+            ['unload', 'beforeunload'].forEach((event) => {
+              window.addEventListener(event, () => {
+                if (typeof GiftCardAllocator !== 'undefined' && GiftCardAllocator.cleanup) GiftCardAllocator.cleanup();
+              });
+            });
+            GrawLogger.log('GRAW AI: All GRAW AI handlers initialized.');
+          } catch (error) {
+            GrawLogger.error('GRAW AI: Error initializing GRAW AI handlers:', error);
+          }
+        })
+        .catch((error) => {
+          GrawLogger.error('GRAW AI: Error during window.voiceflow.chat.load():', error);
+        });
+    }
+    v.src = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
+    v.type = 'text/javascript';
+    s.parentNode.insertBefore(v, s);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeGrawAISystems);
+  } else {
+    setTimeout(initializeGrawAISystems, 0); // Ensure deferred scripts have a chance
+  }
+</script>
+
+{% schema %}
+{
+  "name": "GRAW AI Chatbot",
+  "target": "body",
+  "settings": [
+    {
+      "type": "header",
+      "content": "⚙️ Core Setup"
+    },
+    {
+      "type": "text",
+      "id": "voiceflow_project_id",
+      "label": "Project ID",
+      "info": "Your unique Project ID. This is essential for the chatbot to function. If you don't have this, please contact GRAW.",
+      //"default": ""
+    },
+    {
+      "type": "text",
+      "id": "klaviyo_public_key",
+      "label": "Klaviyo Public API Key (Optional)",
+      "info": "Enter your Klaviyo Public API Key if you use Klaviyo for email marketing."
+      //"default": ""
+    },
+    {
+      "type": "header",
+      "content": "🎨 Chatbot Appearance & Text",
+      "info": "Customize the look and feel of the chatbot."
+    },
+    {
+      "type": "text",
+      "id": "chat_title",
+      "label": "Chatbot Title",
+      "info": "The main title displayed at the top of the open chat widget (e.g., 'Customer Support' or your brand name).",
+      "default": "AI Assistant"
+    },
+    {
+      "type": "textarea",
+      "id": "chat_description",
+      "label": "Chatbot Description",
+      "info": "A short description or welcome message displayed below the title in the chat widget.",
+      "default": "How can I help you today?"
+    },
+    {
+      "type": "text",
+      "id": "launcher_text",
+      "label": "Launcher Button Text",
+      "info": "Custom text for the chat launcher button. Leave blank for default text.",
+      "default": "Ask an Expert"
+    },
+    {
+      "type": "image_picker",
+      "id": "chat_avatar_image",
+      "label": "Chatbot Avatar Image (Optional)",
+      "info": "Appears in the chat header and welcome message. Recommended: square, ideally 80x80px or 100x100px."
+    },
+    {
+      "type": "image_picker",
+      "id": "launcher_icon_image",
+      "label": "Launcher Button Icon (Optional)",
+      "info": "Custom icon for the chat launcher. If not set, the default chat icon will be used. Recommended: small, square (e.g., 24x24px or 32x32px)."
+    },
+    {
+      "type": "text",
+      "id": "chat_message_placeholder",
+      "label": "Message Input Placeholder",
+      "info": "The placeholder text shown in the chat input field before the user types.",
+      "default": "Ask me anything..."
+    },
+    {
+      "type": "color",
+      "id": "chat_base_color",
+      "label": "Chat Base Color (for Palette)",
+      "info": "Select a single base color. We'll generate a 10-shade palette to theme the chat widget. Leave blank/transparent to use the palette pre-configured by GRAW based on your brand colors.",
+      "default": "rgba(0,0,0,0)"
+    },
+    {
+      "type": "header",
+      "content": "💡 Behavioral & Incentive Settingss"
+    },
+    {
+      "type": "range",
+      "id": "free_shipping_threshold",
+      "min": 0,
+      "max": 500,
+      "step": 5,
+      "label": "Free Shipping Threshold (Store's Main Currency Unit)",
+      "unit": "$",
+      "info": "The shopping cart value at which free shipping might be offered as an incentive. Adjust unit based on typical store currency.",
+      "default": 100
+    },
+    {
+      "type": "range",
+      "id": "inactive_customer_months",
+      "min": 1,
+      "max": 24,
+      "step": 1,
+      "unit": "mon",
+      "label": "Inactive Customer Period (Months)",
+      "info": "Number of months without an order after which a customer is considered 'inactive' for targeted incentives.",
+      "default": 3
+    },
+    {
+      "type": "range",
+      "id": "product_page_threshold_time",
+      "min": 5,
+      "max": 100,
+      "step": 1,
+      "unit": "sec",
+      "label": "Product Page Dwell Time for Proactive Message (Seconds)",
+      "info": "How long (in seconds) a user should stay on a product page before a relevant proactive message appears.",
+      "default": 15
+    },
+    {
+      "type": "range",
+      "id": "cart_page_threshold_time",
+      "min": 5,
+      "max": 100,
+      "step": 1,
+      "unit": "sec",
+      "label": "Cart Page Dwell Time for Proactive Message (Seconds)",
+      "info": "How long (in seconds) a user should stay on the cart page before a cart-related proactive message appears.",
+      "default": 5
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,40 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "b69474848d669e48d510363b5715e15c"
+application_url = "https://graw-ai-chatbot-integration.fly.dev"
+embedded = true
+name = "GRAW AI - Chatbot Integration"
+handle = "graw-ai-chatbot-integration"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "https://graw-ai-chatbot-integration.fly.dev/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://graw-ai-chatbot-integration.fly.dev/webhooks/app/uninstalled"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products,write_pixels,read_pixels,read_customer_events"
+
+[auth]
+redirect_urls = [
+  "https://graw-ai-chatbot-integration.fly.dev/auth/callback",
+  "https://graw-ai-chatbot-integration.fly.dev/auth/shopify/callback",
+  "https://graw-ai-chatbot-integration.fly.dev/api/auth/callback"
+]
+
+[app_proxy]
+url = "https://graw-ai-chatbot-integration.fly.dev/api/voiceflow"
+subpath = "voiceflow"
+prefix = "apps"
+
+[pos]
+embedded = false

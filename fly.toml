@@ -1,0 +1,33 @@
+# fly.toml app configuration file generated for graw-ai-chatbot-integration on 2025-03-24T11:01:36Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'graw-ai-chatbot-vilros-v2'
+primary_region = 'lhr'
+
+[env]
+  PORT = "3000"
+  SHOPIFY_APP_URL = "https://graw-ai-chatbot-vilros-v2.fly.dev"
+  SHOPIFY_API_KEY = "544abe90d16982e9f853e323ab77e7c5"
+  SCOPES = "read_products,write_pixels,read_pixels,read_customer_events"
+  PRIMARY_REGION = "lhr"
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = "data"
+  destination = "/var/lib/litefs"

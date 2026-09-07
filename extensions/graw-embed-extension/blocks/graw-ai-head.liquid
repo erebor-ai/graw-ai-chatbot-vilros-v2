@@ -1,0 +1,37 @@
+{% comment %} graw-ai-head.liquid {% endcomment %}
+<style>
+    #voiceflow-chat {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+</style>
+
+<style>
+    #flat-chat { 
+        width: 100vw;
+        height: 100vh;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+    #confetti-canvas {
+        position: fixed;
+        z-index: 999;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+    }
+</style>
+
+{% schema %}
+    {
+        "name": "GRAW AI Head Embed",
+        "target": "head",
+        "settings": [
+        // Potentially settings if needed for head-specific things
+        ]
+    }
+{% endschema %}

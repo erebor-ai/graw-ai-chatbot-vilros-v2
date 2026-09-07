@@ -1,0 +1,31 @@
+name = "cart-attribution-pixel"
+type = "web_pixel_extension"
+uid = "a745e145-5442-adab-a91d-cd46d52ec5b0b9526a16"
+
+runtime_context = "strict"
+
+# Privacy settings for analytics tracking
+[customer_privacy]
+analytics = true
+marketing = false
+preferences = false
+sale_of_data = "disabled"
+
+[settings]
+type = "object"
+
+[settings.fields.enabled]
+name = "Attribution Tracking Enabled"
+description = "Enable cart attribution tracking for this store"
+type = "single_line_text_field"
+validations = [
+  { name = "min", value = "1" }
+]
+
+[settings.fields.app_url]
+name = "App URL for API"
+description = "The base URL of the app for sending attribution data."
+type = "single_line_text_field"
+validations = [
+  { name = "min", value = "1" }
+]
