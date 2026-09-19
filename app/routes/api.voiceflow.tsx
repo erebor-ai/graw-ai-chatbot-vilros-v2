@@ -5,6 +5,15 @@ import { authenticate, activateWebPixel } from "../shopify.server";
 import { z } from "zod";
 import prisma from "../db.server";
 
+// This app is single-tenant per deployment, so Session.shop is the one true myshopify
+// domain — normalize any custom-domain shop param (e.g. from the Web Pixel) to it so
+// attribution rows are never written under a domain the dashboard doesn't query.
+async function resolveCanonicalShopDomain(requestedShop: string): Promise<string> {
+  if (requestedShop.endsWith(".myshopify.com")) return requestedShop;
+  const session = await prisma.session.findFirst({ orderBy: { expires: "desc" } });
+  return session?.shop || requestedShop;
+}
+
 // Simple in-memory rate limiter
 const RATE_LIMIT = {
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -718,11 +727,16 @@ export const action: ActionFunction = async ({ request, context }) => {
       }
       
       try {
+        const canonicalShopDomain = await resolveCanonicalShopDomain(shopDomain);
+        if (canonicalShopDomain !== shopDomain) {
+          console.log(`[Attribution] Normalized shop domain ${shopDomain} -> ${canonicalShopDomain}`);
+        }
+
         // Prevent duplicate attributions for the same session/user within a short time window
         const dedupeKey = `${data.userId || 'anon'}_${data.sessionId || 'nosession'}`;
         const recentCheck = await prisma.attributionTracking.findFirst({
           where: {
-            shopDomain,
+            shopDomain: canonicalShopDomain,
             userId: data.userId || null,
             sessionId: data.sessionId || null,
             createdAt: {
@@ -789,7 +803,7 @@ export const action: ActionFunction = async ({ request, context }) => {
         // Store in database
         const attribution = await prisma.attributionTracking.create({
           data: {
-            shopDomain,
+            shopDomain: canonicalShopDomain,
             attributionType,
             eventType,
             userId: data.userId || null,
@@ -805,7 +819,7 @@ export const action: ActionFunction = async ({ request, context }) => {
           }
         });
         
-        console.log(`[Attribution] Stored ${action} for ${shopDomain}:`, attribution.id);
+        console.log(`[Attribution] Stored ${action} for ${canonicalShopDomain}:`, attribution.id);
         
         return cors(request, new Response(JSON.stringify({ 
           success: true, 

@@ -146,6 +146,9 @@
       
       this.state.lastCheckoutClick = now;
       
+      // Give the order a last chance to carry fresh attribution attributes before checkout.
+      window.GrawCartAttributionBridge?.syncNow();
+      
       // Sync latest conversation state
       this.syncConversationState();
       

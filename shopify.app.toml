@@ -20,9 +20,13 @@ api_version = "2025-10"
   topics = [ "app/uninstalled" ]
   uri = "https://graw-ai-chatbot-vilros-v2.fly.dev/webhooks/app/uninstalled"
 
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "https://graw-ai-chatbot-vilros-v2.fly.dev/webhooks/orders/paid"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products,write_pixels,read_pixels,read_customer_events"
+scopes = "read_products,write_pixels,read_pixels,read_customer_events,read_orders"
 
 [auth]
 redirect_urls = [
