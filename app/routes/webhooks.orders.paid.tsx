@@ -77,8 +77,9 @@ export const action: ActionFunction = async ({ request }) => {
         attributionType: attribution.attributionType || "within_window",
         eventType: "checkout_completed",
         userId: attribution.userId,
-        customerId: order.customer?.id ? String(order.customer.id) : null,
-        customerEmail: order.email || null,
+        // Deliberately not reading order.customer/order.email: the dashboard never uses
+        // customerId/customerEmail, and omitting them keeps this at Shopify's protected
+        // customer data Level 1 (order data) instead of Level 2 (name/email/phone/address).
         sessionId: attribution.sessionId,
         cartValue: order.total_price ? parseFloat(order.total_price) : null,
         daysSinceInteraction,

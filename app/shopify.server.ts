@@ -123,11 +123,13 @@ const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.January25,
-  scopes: ["read_products", "write_pixels", "read_pixels", "read_customer_events"],
+  scopes: ["read_products", "write_pixels", "read_pixels", "read_customer_events", "read_orders"],
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
-  distribution: AppDistribution.AppStore,
+  // Each deployment is a single bespoke app installed on one client's store (never
+  // App Store listed), so SingleMerchant is the accurate distribution type here.
+  distribution: AppDistribution.SingleMerchant,
   webhooks: {
     APP_UNINSTALLED: {
       deliveryMethod: DeliveryMethod.Http,
