@@ -7,7 +7,7 @@ register(({ analytics, browser, settings }) => {
   const STORAGE_KEYS = {
     conversationOngoing: 'graw_conversation_ongoing',
     sessionId: 'graw_session_id',
-    userId: 'graw_user_id',
+    userId: 'vf_user_id',
     chatAttribution: 'graw_chat_attribution'
   };
   

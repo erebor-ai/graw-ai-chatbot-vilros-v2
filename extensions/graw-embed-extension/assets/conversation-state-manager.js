@@ -205,13 +205,17 @@ const ConversationStateManager = {
       
       // Monitor widget state changes
       setInterval(() => {
-        const isOpen = this.isWidgetOpen();
-        if (isOpen && !this.isConversationOngoing) {
+        // Voiceflow's persisted session is the reliable signal; the widget CSS class is a fallback.
+        const isActive = this.hasOngoingConversation() || this.isWidgetOpen();
+        if (isActive && !this.isConversationOngoing) {
           this.updateConversationState(true);
         }
       }, 1000);
     }
   };
+
+  // Other scripts check window.ConversationStateManager; a top-level const is not a window property.
+  window.ConversationStateManager = ConversationStateManager;
   
   // Initialize on load
   if (document.readyState === 'loading') {
