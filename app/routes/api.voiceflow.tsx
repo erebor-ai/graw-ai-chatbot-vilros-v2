@@ -734,9 +734,17 @@ export const action: ActionFunction = async ({ request, context }) => {
 
         // Prevent duplicate attributions for the same session/user within a short time window
         const dedupeKey = `${data.userId || 'anon'}_${data.sessionId || 'nosession'}`;
+        // Scoped by event type so a checkout click right after an add-to-cart isn't dropped as a duplicate.
+        const dedupeEventType = {
+          trackCheckout: 'checkout_started',
+          trackChatAttribution: 'checkout_started',
+          trackAddToCart: 'add_to_cart',
+          trackCheckoutCompleted: 'checkout_completed'
+        }[action as string];
         const recentCheck = await prisma.attributionTracking.findFirst({
           where: {
             shopDomain: canonicalShopDomain,
+            eventType: dedupeEventType,
             userId: data.userId || null,
             sessionId: data.sessionId || null,
             createdAt: {
