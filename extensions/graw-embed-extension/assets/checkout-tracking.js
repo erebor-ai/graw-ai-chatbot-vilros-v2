@@ -345,6 +345,8 @@
         headers: {
           'Content-Type': 'application/json',
         },
+        // The request fires on the checkout click, so it must survive the page navigating away.
+        keepalive: true,
         body: JSON.stringify(data)
       })
       .then(response => {
