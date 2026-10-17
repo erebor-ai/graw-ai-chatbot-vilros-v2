@@ -10,8 +10,16 @@ import prisma from "../db.server";
 // attribution rows are never written under a domain the dashboard doesn't query.
 async function resolveCanonicalShopDomain(requestedShop: string): Promise<string> {
   if (requestedShop.endsWith(".myshopify.com")) return requestedShop;
-  const session = await prisma.session.findFirst({ orderBy: { expires: "desc" } });
-  return session?.shop || requestedShop;
+  // Guessing between several installed shops could file one store's events under another.
+  const shops = await prisma.session.findMany({ distinct: ["shop"], select: { shop: true } });
+  return shops.length === 1 ? shops[0].shop : requestedShop;
+}
+
+// Same secret the wipe endpoints use; the debug/clear endpoints expose or delete store data.
+function hasValidAdminSecret(url: URL): boolean {
+  const expected = process.env.REMOTE_ACTIVATE_SECRET;
+  const provided = url.searchParams.get("secret");
+  return !!expected && !!provided && provided === expected;
 }
 
 // Simple in-memory rate limiter
@@ -300,6 +308,12 @@ export const loader: LoaderFunction = async ({ request, context }) => {
 
     // Handle debug attribution request
     if (action === "debugAttribution") {
+      if (!hasValidAdminSecret(url)) {
+        return cors(request, new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" }
+        }));
+      }
       const shopDomain = url.searchParams.get("shop");
       
       if (!shopDomain) {
@@ -365,6 +379,12 @@ export const loader: LoaderFunction = async ({ request, context }) => {
     
     // Handle clear attribution request (for testing)
     if (action === "clearAttribution") {
+      if (!hasValidAdminSecret(url)) {
+        return cors(request, new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" }
+        }));
+      }
       const shopDomain = url.searchParams.get("shop");
       
       if (!shopDomain) {
